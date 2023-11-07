@@ -21,7 +21,7 @@ Created on Sun Oct  8 13:59:06 2023
 
 
 #----------------------[Remarques]--------------------
-#J'en suis à corriger les types et à gérer les conventions de notations
+#Il me faut construire la fonction DijkstraVersion2 qui renvoie l'arbre de parenté
 #méthodes et fonctions: Fonction()
 #variables: maSuperVariable
 
@@ -30,6 +30,8 @@ Created on Sun Oct  8 13:59:06 2023
 
 
 import pyparsing as pp
+import graphviz as gv
+noFigure = 0
 
 #OBJETS
 class Node:
@@ -209,7 +211,19 @@ class Graph:
         
         return paths
     
-    
+    def Display(self):
+        """graph.Display()
+        Construit, sauvegarde et affiche une représentation en svg de graph."""
+        global noFigure
+        diag = gv.Digraph(f'{self.name}', filename=f'figures/{noFigure}.gv', format='svg')
+        noFigure += 1
+        
+        for arc in self.arcs:
+            diag.edge(arc.source.name, arc.target.name, label=str(arc.weight))
+        for node in self.nodes:
+            diag.node(node.name)
+        diag.view()
+        
 class Tree(Graph):
 #---Dunder methods
     def __init__(self, nodes=set(), arcs=set(), name='Arbre'):
