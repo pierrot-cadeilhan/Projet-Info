@@ -34,7 +34,19 @@ Created on Sun Oct  8 13:59:06 2023
 #--------------------[Fin des remarques]--------------------
 
 
+
+#On représentera le plus court chemin de n0 à n0 par Path({n0}, {})
+#   -> par convention, length = 0
+#   -> on le représente par '-'
+#On représentera le plus court chemin entre n0 et n1 2 points non connexes par Path({n0, n1}, {})
+#   -> par convention, length = inf
+#   -> on le représente par '-'
+#       /!\ on n'a plus de direction n0 vers n1 !! il faut peut être introduire un arc none !!!
+
+
 import pyparsing as pp
+import railroad
+import graphviz as gv
 
 #EXCEPTIONS
 class UnexistingElement(Exception):
@@ -84,23 +96,6 @@ class Node:
         else:
             return set([a for a in graph.arcs if a.source == self])
 
-    def parents(self, graph)->set:
-        """Returns the sub-set of the graph's nodes whose self is a child
-        Note: this can be obtained with Node.arcsTowards"""
-        if not self in graph.nodes:
-            raise UnexistingElement
-            return set()
-        else:
-            return set([a.source for a in graph.arcs if a.target == self])
-
-    def children(self, graph)->set:
-        """Returns the sub-set of the graph's nodes whose self is a parent
-        Note: this can be obtained with Node.arcsFrom"""
-        if not self in graph.nodes:
-            raise UnexistingElement
-            return set()
-        else:
-            return set([a.target for a in graph.arcs if a.source == self])
 
 class Arc:
 #---Dunder methods
@@ -121,9 +116,6 @@ class Arc:
         return self.weight < other.weight
         
 #---Custom methods
-    def length(self):
-        "Returns the length of the arc"
-        return self.weight
     
     def asPath(self):
         "Returns the equivalent path to this arc"
@@ -135,16 +127,23 @@ class Arc:
     
 class Graph:
 #---Dunder methods
-    def __init__(self, name='graphe'):
+    def __init__(self, nodes = set(), arcs = set(), name='graphe'):
         self.name = name
-        self.nodes = set()
-        self.arcs = set()
+        self.nodes = nodes
+        self.arcs = arcs
     
     def __add__(self, other):
         g_ = self.__class__()
         g_.name = self.name + '+' + other.name
         g_.nodes = self.nodes | other.nodes
         g_.arcs = self.arcs | other.arcs
+        return g_
+    
+    def __sub__(self, other):
+        g_ = self.__class__()
+        g_.name = self.name + '-' + other.name
+        g_.nodes = self.nodes | other.nodes
+        g_.arcs = self.arcs - other.arcs
         return g_
     
     def __eq__(self, other):
@@ -212,15 +211,82 @@ class Graph:
         self.nodes = set([Node(n) for n in nodes])
         self.arcs = set([Arc(self.getNode(a[0]), self.getNode(a[1]), float(a[2])) for a in arcs])
     
+    def cleanerDijkstra(self, root):
+        """cleanerDijkstra(self, n0)
+        Renvoie l'arbre de parentée des sommets du graphe tel que:
+            -sa racine est n0
+            -tout point non atteignable n'est pas dans ce graphe"""
+        
+        tree = Tree()
+        dist = {n:float('inf') for n in self.nodes}
+        dist[root]=0
+        parent = dict()
+        
+        while len(self.nodes-tree.nodes) > 0:
+            L = list(self.nodes - tree.nodes)
+            nMin = L[0]
+            dMin = dist[nMin]
+            for n in L[1:]:
+                if dist[n] <= dMin:
+                    nMin = n
+                    dMin = dist[n]
+            tree.addNode(nMin)
+            if nMin != root:
+                tree.addArc(Arc(parent[nMin], nMin, dist[nMin]-dist[parent[nMin]]))
+            
+            for a in nMin.arcsFrom(self):
+                if a.target not in tree.nodes:
+                    if dist[a.target] > dist[nMin] + a.weight:
+                        dist[a.target] = dist[nMin] + a.weight
+                        parent[a.target] = nMin
+        return tree
+
+     
+    def cleanerDijkstraBuguee(self, root):
+        """cleanerDijkstra(self, n0)
+        Renvoie l'arbre de parentée des sommets du graphe tel que:
+            -sa racine est n0
+            -tout point non atteignable n'est pas dans ce graphe"""
+        
+        tree = Tree()
+        toExplore = {root}
+        dist = {root:0}
+        parent = dict()
+        
+        while len(toExplore-tree.nodes) > 0:
+            L = list(toExplore - tree.nodes)
+            nMin = L[0]
+            dMin = dist[nMin]
+            for n in L[1:]:
+                if dist[n] <= dMin:
+                    nMin = n
+                    dMin = dist[n]
+            tree.addNode(nMin)
+            if nMin != root:
+                tree.addArc(Arc(parent[nMin], nMin, dist[nMin]-dist[parent[nMin]]))
+            
+            for a in nMin.arcsFrom(self):
+                if a.target not in tree.nodes:
+                    if a not in toExplore:
+                        toExplore.add(a.target)
+                        dist[a.target] = dist[nMin] + a.weight
+                        parent[a.target] = nMin
+                    else:
+                        if dist[a.target] > dist[nMin] + a.weight:
+                            dist[a.target] = dist[nMin] + a.weight
+                            parent[a.target] = nMin
+        return tree
+
     def dijkstra(self, n0):
         "Returns the dictionary of shorter paths towards all the graph's nodes"
-        p0 = Path()
-        p0.addNode(n0)
-        
+        p0 = Path({n0})
         toVisit = {n0}
         visited = set()
         paths = {n0: p0}
+        
         while(len(toVisit) > 0):
+            print([(n_, paths[n_].endingNode()) for n_ in paths if n_ not in visited])
+            
             p = min([paths[n_] for n_ in paths if n_ not in visited])
             n = p.endingNode()
             toVisit.remove(n)
@@ -232,7 +298,8 @@ class Graph:
                 if not a_.target in visited:
                     p_ = p + a_.asPath()
                     if a_.target in toVisit:
-                        if p_ < paths[a_.target]: paths[a_.target] = p_
+                        if p_ < paths[a_.target]:
+                            paths[a_.target] = p_
                     else:
                         toVisit.add(a_.target)
                         paths[a_.target] = p_
@@ -244,6 +311,28 @@ class Graph:
             paths[n] = pNone
         
         return paths
+
+    def cleanerTable(self, BASE):
+        """Returns a 2-tensor whose column vectors are the distances from the
+        base node"""
+        parentyTrees = {node : cleanerDijkstra(node) for node in BASE}
+        #Qu'est ce qui est le plus élégant ?
+        #   -garder la convertion en chemins (structure claire et précise mais code plus long)
+        #   -travailler directement sur le graphe de parentée (syntaxe plus lourde mais pas de redondance)  
+        shortestPaths = {node0 : {node1 : parentyTrees[node0].pathTowards(node1)for node1 in BASE} for node0 in BASE}
+        text = " "*5
+        for node1 in BASE:
+            text += f'{node1.name:^5}'
+        for node0 in BASE:
+            row = f'{node2.name:^5}'
+            for node1 in BASE:
+                path = shortestPaths[node0][node1]
+                if path.isNone() or path.isNull():
+                    row += f'{"-":^5}'
+                else:
+                    row += f'{path.length():^5}'
+            text += row + '\n'
+        return text
     
     def matrice(self, base):
         """Returns a 2-tensor whose column vectors are the distances from the
@@ -265,38 +354,80 @@ class Graph:
             maxPaths.append(max([paths[n] for n in paths]))
         return max(maxPaths)
     
-class Path(Graph):
-    "Acyclic, ordered, connex graph whose each node is connected less than 3 arcs"
-    #CARACTERISATION A PROUVER !!!
+    def display(self):
+        print(self.name)
+        G =  gv.Digraph(self.name, filename=r'\figures\test.gv', format='svg')
+        for arc in self.arcs:
+            G.edge(arc.source.name, arc.target.name, label=f'{arc.weight}')
+        for node in self.nodes:
+            G.node(node.name)
+        return G
+       
+class Tree(Graph):
 #---Dunder methods
-    def __init__(self, name = 'chemin'):
-        super().__init__(name)
-        #VERIFIER SI EST UN ARBRE CONNEXE
+    def __init__(self, nodes = set(), arcs = set(), name = 'arbre'):
+        super().__init__(nodes, arcs, name)
+            
+#---Custom methods
+    def Deepness(self, node):
+        if not node in self.nodes:
+            deepness = float('inf')
+        else:
+            deepness = 0
+            while len(node.arcsTowards(self)) == 1:
+                arc = list(node.arcsTowards(self))[0]
+                node = arc.source
+                deepness += arc.weight
+        return deepness
+        
+    def Root(self):
+        return [node for node in self.nodes if len(node.arcsTowards(self)) == 0][0]
     
+    def pathTowards(self, node):
+        if not node in self.nodes:
+            path = Path(nodes={self.Root(), node})
+        else:
+            path = Path()
+            path.addNode(node)
+            while len(node.arcsTowards(self)) == 1:
+                arc = list(node.arcsTowards(self))[0]
+                node = arc.source
+                path.addNode(node)
+                path.addArc(arc)
+        print(node.name)
+        path.name = self.name+f'_towards_{node.name}'
+        return path
+        
+class Path(Tree):
+#---Dunder methods
+    def __init__(self, nodes = set(), arcs = set(), name = 'chemin'):
+        super().__init__(nodes, arcs, name)
     
     def __lt__(self, other):
-        return self.length() < other.length()
-        
+        return self.length() < other.length()   
     
 #---Custom methods
     def length(self):
         "Returns the length of the path"
-        return sum([a.length() for a in self.arcs])
+        if self.isNone():
+            return float('inf')
+        else:
+            return sum([a.weight for a in self.arcs])
         
     def startingNode(self):
         "Returns the starting node of the path"
-        if len(self.nodes) == 0:
-            raise UnexistingElement
-        else:
-            return [n for n in self.nodes if len(n.arcsTowards(self)) == 0][0]
+        return self.Root()
     
     def endingNode(self):
         "Returns the ending node of the path"
-        if len(self.nodes) == 0:
-            raise UnexistingElement
-        else:
-            return [n for n in self.nodes if len(n.arcsFrom(self)) == 0][0]
-        
+        return [node for node in self.nodes if len(node.arcsFrom(self)) == 0][0]
+    
+    def isNone(self)->bool:
+        return len(self.arcs) == 0 and len(self.nodes) == 2
+    
+    def isNull(self)->bool:
+        return len(self.arcs) == 0 and len(self.nodes) == 1
+    
 class Parser:
 #---Dunder methods    
     def __init__(self):
@@ -333,6 +464,11 @@ class Parser:
             print(" "*(err.column-1) + "^")
             print(err)
         return retourParser
+    
+    def createDiagram(self, filename = 'diagramme'):
+        if int(pp.__version__.split('.')[0]) >= 3:
+            self.graphePattern.create_diagram('parser_element_sommets_diag.html')
+
 
 if __name__ == "__main__":
     p = Parser()
@@ -342,4 +478,11 @@ if __name__ == "__main__":
     BASE = [n for n in g.nodes]
     BASE.sort()
     
-    
+    # lsp = g.longestShortestPath()
+    # G =  gv.Digraph(g.name, filename=f'{g.name}.gv', format='svg')
+    # for arc in (g - lsp).arcs:
+    #     G.edge(arc.source.name, arc.target.name, label=f'{arc.weight}')
+    # for arc in lsp.arcs:
+    #     G.edge(arc.source.name, arc.target.name, label=f'{arc.weight}', color='red')
+    # for n in lsp.nodes:
+    #     G.node(n.name, color='red', fontcolor='red')
