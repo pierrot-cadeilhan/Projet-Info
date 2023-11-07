@@ -6,101 +6,68 @@ Created on Sun Oct  8 13:59:06 2023
 """
 
 #--------------------[Préface]--------------------
-#On conviendra que:
-#   ->__repr__  est une description précise et non-ambigue.
-#   ->__str__   est une description interprétable par l'utilisateur.
-#
 #On acceptera l'existence de deux instances (ex: Node, Arc, ...) aux attributs
 #identiques comme deux objets distincts.
 #
-#On considerera que l'utilisateur ne commet pas d'erreur de typage
+#On considèrera que le chemin Path({n1, n2}, {}) est un chemin inexistant entre n1 et n2
+#On pourra ainsi considérer des graphes d'arêtes de poids infinis
+#On considèrera que le chemin Path({n0}, {}) est le chemin entre n0 et n0 sans arête
+#On pourra ainsi considérer des graphes d'arêtes de coefficients nuls
 #
-#Le programme mettra exagéremment l'accent (parfois au delà du raisonnable) sur:
-#   ->la gestion des erreurs
-#   ->l'orienté objet
-#afin de se familiariser à ces notions.
+#/!\ et des graphes d'arêtes à poids négatif ?
 #
 #En espérant que le code soit aussi clair pour vous qu'il ne l'est pour moi.
 #--------------------[Fin de la préface]--------------------
 
 
-#--------------------[Remarques]--------------------
-#Les exceptions terminent l'instruction en cours (le corps de boucle) à la
-#manière de 'continue' --> SI J'AI LE TEMPS UTILISER MODULE WARNINGS POUR LES PSEUDO-ERREURS
-#
-#Spécifier le texte mais utiliser le value Eroor
-#
-#On reviendra sur l'implémentation de PATH comme un héritage de Graphe
+#----------------------[Remarques]--------------------
+#J'en suis à corriger les types et à gérer les conventions de notations
+#méthodes et fonctions: Fonction()
+#variables: maSuperVariable
+
+#Path n'hérite pas de Tree car n'est pas forcément connexe
 #--------------------[Fin des remarques]--------------------
 
 
 import pyparsing as pp
 
-#EXCEPTIONS
-class UnexistingElement(Exception):
-    "Raised when an instruction refers to an unexisting element"
-    pass
-
-#class AmbiguousElement(Exception):
-#    "Raised when two distinct instances share the same attributes"
-#    pass
-    
-class IncorrectPath(Exception):
-    "Raised when an instruction refers to an incorrect Path"
-    
-    
-
 #OBJETS
 class Node:
 #---Dunder methods
-    def __init__(self, name):
+    def __init__(self, name='Sommet'):
         self.name = str(name)
         
     def __repr__(self):
-        "Precise description"
+        """Description non ambigue de l'objet."""
         return f'Node("{self.name}")'
     
     def __str__(self):
-        "Brief description"
+        """Description claire de l'objet."""
         return self.name
     
     def __lt__(self, other):
         return self.name < other.name
     
 #---Custom methods
-    def arcsTowards(self, graph)->set:
-        "Returns the sub-set of the graph's arcs pointing towards self"
+    def ArcsTowards(self, graph)->set:
+        """node.ArcsTowards(graph)
+        Renvoie le sous-ensemble des arêtes de graph pointant vers node.
+        """
         if not self in graph.nodes:
-            raise UnexistingElement
+            print(f"Le sommet {self.name} n'est pas dans le graphe {graph.name}.")
             return set()
         else:
             return set([a for a in graph.arcs if a.target == self])
     
-    def arcsFrom(self, graph)->set:
-        "Returns the sub-set of the graph's arcs departing from self"
+    def ArcsFrom(self, graph)->set:
+        """node.ArcsFrom(graph)
+        Renvoie le sous-ensemble des arêtes de graph partant de node.
+        """
         if not self in graph.nodes:
-            raise UnexistingElement
+            print(f"Le sommet {self.name} n'est pas dans le graphe {graph.name}.")
             return set()
         else:
             return set([a for a in graph.arcs if a.source == self])
-
-    def parents(self, graph)->set:
-        """Returns the sub-set of the graph's nodes whose self is a child
-        Note: this can be obtained with Node.arcsTowards"""
-        if not self in graph.nodes:
-            raise UnexistingElement
-            return set()
-        else:
-            return set([a.source for a in graph.arcs if a.target == self])
-
-    def children(self, graph)->set:
-        """Returns the sub-set of the graph's nodes whose self is a parent
-        Note: this can be obtained with Node.arcsFrom"""
-        if not self in graph.nodes:
-            raise UnexistingElement
-            return set()
-        else:
-            return set([a.target for a in graph.arcs if a.source == self])
 
 class Arc:
 #---Dunder methods
@@ -110,99 +77,97 @@ class Arc:
         self.weight = weight
         
     def __repr__(self):
-        "Precise description"
+        """Description non ambigue de l'objet."""
         return f'Arc({self.source}, {self.target}, {self.weight})'
         
     def __str__(self):
-        "Brief description"
-        return f'{self.source}-[{self.weight}]>{self.target}'
+        """Description claire de l'objet."""
+        return f'({self.source}, {self.target}, {self.weight})'
 
     def __lt__(self, other):
         return self.weight < other.weight
         
 #---Custom methods
-    def length(self):
-        "Returns the length of the arc"
-        return self.weight
-    
-    def asPath(self):
-        "Returns the equivalent path to this arc"
-        p_ = Path()
-        p_.addNode(self.source)
-        p_.addNode(self.target)
-        p_.addArc(self)
-        return p_
+    def AsPath(self):
+        """arc.AsPath()
+        Renvoie le chemin équivalent à l'arc"""
+        return Path(nodes={self.source, self.target}, start=self.source, arcs={self}, name='Arc')
     
 class Graph:
 #---Dunder methods
-    def __init__(self, name='graphe'):
+    def __init__(self, arcs=set(), nodes=set(), name='Graphe'):
         self.name = name
-        self.nodes = set()
-        self.arcs = set()
+        self.nodes = nodes
+        self.arcs = arcs
     
     def __add__(self, other):
-        g_ = self.__class__()
-        g_.name = self.name + '+' + other.name
-        g_.nodes = self.nodes | other.nodes
-        g_.arcs = self.arcs | other.arcs
-        return g_
+        """Somme de deux graphes comme la réunion
+        des sommets et des arêtes."""
+        g = self.__class__()
+        g.name = self.name + '+' + other.name
+        g.nodes = self.nodes | other.nodes
+        g.arcs = self.arcs | other.arcs
+        return g
     
-    def __eq__(self, other):
-        return self.arcs == other.arcs and self.nodes == other.nodes
+    def __sub__(self, other):
+        """Différence de deux graphes comme la réunion
+        des sommets et la différence des arêtes."""
+        g = Graph()
+        g.name = self.name + '-' + other.name
+        g.nodes = self.nodes | other.nodes
+        g.arcs = self.arcs - other.arcs
+        return g
     
 #---Custom methods
-    def addNode(self, node):
-        "Adds node to the graph"
+    def AddNode(self, node):
+        """graph.AddNode(node)
+        Ajoute node aux sommets de graph."""
         if node.name in [n.name for n in self.nodes]:
-            pass
-            #Pseudo-erreur, juste à titre informatif
-            #
-            #IL FAUT RAISE UN WARNING AMBIGOUS ELT
+            print("Il y a déjà un sommet de nom {node.name} dans le graphe {self.name}.")
         self.nodes.add(node)
         
-    def removeNode(self, node):
-        "Removes node from the graph"
+    def RemoveNode(self, node):
+        """graph.RemoveNode(node)
+        Retire node des sommets de graph."""
         if not node in self.nodes:
-            raise UnexistingElement
-        else: self.nodes.remove(node)
+            print(f"Le sommet {node.name} n'est pas dans le graphe {self.name}.")
+        else:
+            self.nodes.remove(node)
         
-    def addArc(self, arc):
-        "Adds arc to the graph"
-        if (arc.source, arc.target, arc.weight) in [(a.source, a.target, a.weight) for a in self.arcs]:
-            pass
-            #Pseudo-erreur, juste à titre informatif
-            #
-            #IL FAUT RAISE UN WARNING AMBIGOUS ELT
+    def AddArc(self, arc):
+        """graph.AddArc(arc)
+        Ajoute arc aux arcs de graph."""
         self.arcs.add(arc)
     
-    def removeArc(self, arc):
-        "Removes arc from the graph"
+    def RemoveArc(self, arc):
+        """graph.RemoveArc(arc)
+        Retire arc des arcs de graph."""
         if not arc in self.arcs:
-            raise UnexistingElement
-        else: self.arcs.remove(arc)
+            print(f"L'arc {arc} n'est pas dans le graphe {self.name}.")
+        else:
+             self.arcs.remove(arc)
         
-    def getNode(self, name)->Node:
-        "Returns one of the graph's nodes whose name is name"
+    def GetNode(self, name)->Node:
+        """graph.GetNode(name)
+        Renvoie un sommet de graph dont le nom est name"""
         nodes = [n for n in self.nodes if n.name == str(name)]
         if nodes == []:
-            raise UnexistingElement
+            print("Il n'y a pas de sommet du nom de {name} dans le graphe {self.name}.")
             return None
         else:
             if len(nodes) > 1:
-                pass
-                #Pseudo-erreur, juste à titre informatif
-                #
-                #IL FAUT RAISE UN WARNING AMBIGOUS ELT
+                print("Il y a plusieurs sommets du nom de {name} dans le graphe {self.name}.")
             return nodes[0]
         
-    def fromFile(self, parser, fileName:str):
-        "Load the graph's data from the '../fileName' file"
-        #Parse les données selon le pattern du parser
-        parsedData = parser.parse(fileName)
+    def FromFile(self, parser, fileName:str):
+        """graph.FromFile(parser, fileName)
+        Charge dans graph le graphe représenté dans fileName selon le parseur parser"""
         
+        #Parse les données selon la syntaxe de parser
+        parsedData = parser.Parse(fileName)
         #Charge les parametres du graphe dans un dictionnaire
-        #(on ne doit avoir que Name=nomDuGraphe)
         parametres = {p[0]:p[1] for p in parsedData[0]}
+        
         nodes = parsedData[1]
         arcs = parsedData[2]
     
@@ -210,93 +175,119 @@ class Graph:
             self.name = parametres['Name']
     
         self.nodes = set([Node(n) for n in nodes])
-        self.arcs = set([Arc(self.getNode(a[0]), self.getNode(a[1]), float(a[2])) for a in arcs])
+        self.arcs = set([Arc(self.GetNode(a[0]), self.GetNode(a[1]), float(a[2])) for a in arcs])
     
-    def dijkstra(self, n0):
-        "Returns the dictionary of shorter paths towards all the graph's nodes"
-        p0 = Path()
-        p0.addNode(n0)
+    def Dijkstra(self, node0):
+        """graph.Dijkstra(node0)
+        Renvoie le dictionnaire des plus courts chemins vers tous les sommets de graph depuis node0"""
+        p0 = Path(nodes={node0}, start=node0)
         
-        toVisit = {n0}
+        toVisit = {node0}
         visited = set()
-        paths = {n0: p0}
+        paths = {node0: p0}
         while(len(toVisit) > 0):
-            p = min([paths[n_] for n_ in paths if n_ not in visited])
-            n = p.endingNode()
-            toVisit.remove(n)
-            visited.add(n)
+            minPath = min([paths[node] for node in paths if node not in visited])
+            minNode = minPath.EndingNode()
+            toVisit.remove(minNode)
+            visited.add(minNode)
             
             #On notera v_ toute variable v qu'on utilise pour explorer les arcs
-            for a_ in n.arcsFrom(self):
+            for arc in minNode.ArcsFrom(self):
                 #On ne parcourt que les arcs dont les sommets d'arrivées ne sont pas visités
-                if not a_.target in visited:
-                    p_ = p + a_.asPath()
-                    if a_.target in toVisit:
-                        if p_ < paths[a_.target]: paths[a_.target] = p_
+                if not arc.target in visited:
+                    path = minPath + arc.AsPath()
+                    if arc.target in toVisit:
+                        if path < paths[arc.target]:
+                            paths[arc.target] = path
                     else:
-                        toVisit.add(a_.target)
-                        paths[a_.target] = p_
+                        toVisit.add(arc.target)
+                        paths[arc.target] = path
                         
-        for n in self.nodes - visited:
-            pNone = Path()
-            pNone.addNode(n0)
-            pNone.addNode(n)
-            paths[n] = pNone
+        for node in self.nodes - visited:
+            pNone = Path(nodes={node0, node}, start=node0)
+            paths[node] = pNone
         
         return paths
     
-    def matrice(self, base):
-        """Returns a 2-tensor whose column vectors are the distances from the
-        base node"""
-        M = []
-        for n0 in base:
-            paths = self.dijkstra(n0)
-            row = []
-            for n in base:
-                row.append(paths[n].length())
-            M.append(row)
-        return [[M[j][i] for j in range(len(M[i]))] for i in range(len(M))]
     
-    def longestShortestPath(self):
-        "Returns the longest shortest path of the graph"
-        maxPaths = []
-        for n0 in self.nodes:
-            paths = self.dijkstra(n0)
-            maxPaths.append(max([paths[n] for n in paths]))
-        return max(maxPaths)
+class Tree(Graph):
+#---Dunder methods
+    def __init__(self, nodes=set(), arcs=set(), name='Arbre'):
+        super().__init__(nodes=nodes, arcs=arcs, name=name)
+        
+#---Custom methods
+    def Depth(self, node):
+        """tree.Depth(node)
+        Renvoie la profondeur de node dans tree."""
+        if not node in self.nodes:
+            #Par convention, la longueur d'un chemin inexistant est l'infini
+            depth = float('inf')
+        else:
+            depth = 0
+            while len(node.ArcsTowards(self)) == 1:
+                arc = list(node.ArcsTowards(self))[0]
+                node = arc.source
+                depth += arc.weight
+        return depth
+        
+    def Root(self):
+        """tree.Root()
+        Renvoie le sommet racine de tree."""   
+        #La formule est définie car l'arbre est connexe sans cycle
+        return [node for node in self.nodes if len(node.ArcsTowards(self)) == 0][0]
+
+
     
 class Path(Graph):
-    "Acyclic, ordered, connex graph whose each node is connected less than 3 arcs"
-    #CARACTERISATION A PROUVER !!!
 #---Dunder methods
-    def __init__(self, name = 'chemin'):
-        super().__init__(name)
-        #VERIFIER SI EST UN ARBRE CONNEXE
-    
-    
+    def __init__(self, nodes=set(), start=Node(), arcs=set(), name='Chemin'):
+        super().__init__(nodes=nodes, arcs=arcs, name=name)
+        self.start = start
+        
     def __lt__(self, other):
-        return self.length() < other.length()
-        
+        return self.Length() < other.Length()
     
+    def __add__(self, other):
+        """Somme de deux graphes comme la réunion
+        des sommets et la différence des arêtes."""
+        #/!\ Il faut que le sommet à l'extrémité de self soit le sommet de départ de other
+        p = Path()
+        p.name = self.name + '-' + other.name
+        p.nodes = self.nodes | other.nodes
+        p.arcs = self.arcs | other.arcs
+        p.start = self.start
+        return p
+        
+        
 #---Custom methods
-    def length(self):
-        "Returns the length of the path"
-        return sum([a.length() for a in self.arcs])
-        
-    def startingNode(self):
-        "Returns the starting node of the path"
-        if len(self.nodes) == 0:
-            raise UnexistingElement
+    def Length(self):
+        """path.Length()
+        Renvoie la longueur de path."""
+        if self.IsNot():
+            return float('inf')
         else:
-            return [n for n in self.nodes if len(n.arcsTowards(self)) == 0][0]
+            return sum([arc.weight for arc in self.arcs])        
     
-    def endingNode(self):
-        "Returns the ending node of the path"
-        if len(self.nodes) == 0:
-            raise UnexistingElement
+    def EndingNode(self):
+        """path.EndingNode()
+        Renvoie le sommet à l'extrémité de path."""
+        if self.IsNot():
+            return list(self.nodes-{self.start})[0]
         else:
-            return [n for n in self.nodes if len(n.arcsFrom(self)) == 0][0]
-        
+            return [node for node in self.nodes if len(node.ArcsFrom(self)) == 0][0]
+    
+    def IsTrivial(self):
+        """path.IsTrivial()
+        Renvoie True si path connecte un sommet à lui même
+        sans l'intermédiaire d'arêtes."""
+        return len(self.nodes)==1 and len(self.arcs) == 0
+    
+    def IsNot(self):
+        """path.IsNot()
+        Renvoie True si path n'est pas connexe (par convention s'il n'existe pas)."""
+        return len(self.nodes)==2 and len(self.arcs) == 0
+    
+    
 class Parser:
 #---Dunder methods    
     def __init__(self):
@@ -322,7 +313,7 @@ class Parser:
         self.graphePattern = headingPattern + sommetsPattern + arcsPattern + tailPattern
 
  #---Custom methods       
-    def parse(self, fileName: str):
+    def Parse(self, fileName: str):
         "Parse a <GRAPHE> </GRAPHE> structure encoded in the '../fileName' file"
         #ATTENTION: On suppose que le fichier en question est bien encodé et ne contient qu'un graphe
         retourParser = None
@@ -337,9 +328,10 @@ class Parser:
 if __name__ == "__main__":
     p = Parser()
     g = Graph()
-    g.fromFile(p, 'graphe.txt')
+    g.FromFile(p, 'graphe.txt')
     
     BASE = [n for n in g.nodes]
     BASE.sort()
     
-    
+    g = Graph(nodes={BASE[0], BASE[1], BASE[2]}, arcs={Arc(BASE[0], BASE[1], 1), Arc(BASE[1], BASE[2], 1), Arc(BASE[2], BASE[0], 1)}, name="Cycle")
+    t = Tree(nodes={BASE[0], BASE[1], BASE[2], BASE[3]}, arcs={Arc(BASE[0], BASE[1], 1), Arc(BASE[0], BASE[2], 1), Arc(BASE[2], BASE[3], 1)}, name='Arbre_exemple')
