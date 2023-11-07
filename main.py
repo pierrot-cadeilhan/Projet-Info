@@ -14,14 +14,14 @@ Created on Sun Oct  8 13:59:06 2023
 #On considèrera que le chemin Path({n0}, {}) est le chemin entre n0 et n0 sans arête
 #On pourra ainsi considérer des graphes d'arêtes de coefficients nuls
 #
-#/!\ et des graphes d'arêtes à poids négatif ?
+#/!\ et des graphes d'arêtes à poids négatif ? Dijkstra ne marchera pas T^T
 #
 #En espérant que le code soit aussi clair pour vous qu'il ne l'est pour moi.
 #--------------------[Fin de la préface]--------------------
 
 
 #----------------------[Remarques]--------------------
-#Il me faut construire la fonction DijkstraVersion2 qui renvoie l'arbre de parenté
+#J'en suis à corriger les types et à gérer les conventions de notations
 #méthodes et fonctions: Fonction()
 #variables: maSuperVariable
 
@@ -179,37 +179,51 @@ class Graph:
         self.nodes = set([Node(n) for n in nodes])
         self.arcs = set([Arc(self.GetNode(a[0]), self.GetNode(a[1]), float(a[2])) for a in arcs])
     
-    def Dijkstra(self, node0):
-        """graph.Dijkstra(node0)
-        Renvoie le dictionnaire des plus courts chemins vers tous les sommets de graph depuis node0"""
-        p0 = Path(nodes={node0}, start=node0)
-        
-        toVisit = {node0}
-        visited = set()
-        paths = {node0: p0}
-        while(len(toVisit) > 0):
-            minPath = min([paths[node] for node in paths if node not in visited])
-            minNode = minPath.EndingNode()
-            toVisit.remove(minNode)
-            visited.add(minNode)
+    def Dijkstra(self, root):
+        """graph.Dijkstra(root)
+        Renvoie l'arbre de parenté des sommets de graph tel que:
+            - sa racine est root
+            - tout point d'une autre partie connexe de graph
+            n'est pas dans cet arbre"""
+       
+        tree = Tree()
+        #Tous les sommets dans toExplore | tree.nodes sont clés de dist
+        toExplore = {root}
+        dist = {root:0}
+        parent = dict()
+        while len(toExplore - tree.nodes) > 0:
+            print(toExplore)
+            #On prend le sommet déjà exploré le plus proche (il n'existera pas de plus court chemins que celui déjà trouvé)
+            L = list(toExplore - tree.nodes)
+            nMin = L[0]
+            dMin = dist[nMin]
+            for node in L[1:]:
+                if dist[node] <= dMin:
+                    nMin = node
+                    dMin = dist[node]
+                    
+            #On l'ajoute à l'arbre et on le retire de toExplore car il est entièrement déterminé
+            tree.AddNode(nMin)
+            toExplore.remove(nMin)
+            if nMin != root:
+                #S'il ne sagit pas de la racine, on crée un arc entre lui et son parent
+                tree.AddArc(Arc(parent[nMin], nMin, dist[nMin]-dist[parent[nMin]]))
             
-            #On notera v_ toute variable v qu'on utilise pour explorer les arcs
-            for arc in minNode.ArcsFrom(self):
-                #On ne parcourt que les arcs dont les sommets d'arrivées ne sont pas visités
-                if not arc.target in visited:
-                    path = minPath + arc.AsPath()
-                    if arc.target in toVisit:
-                        if path < paths[arc.target]:
-                            paths[arc.target] = path
+            #On parcourt ses sommets fils non encore déterminés, et on met à jour leurs propriétés
+            for arc in nMin.ArcsFrom(self):
+                if arc.target not in tree.nodes:
+                    dExplo = dist[nMin] + arc.weight
+                    #Si ce sommet est déjà rencontré, on le met à jour
+                    if arc.target in toExplore:
+                        if dist[arc.target] > dExplo:
+                            dist[arc.target] = dExplo
+                            parent[arc.target] = nMin
+                    #Sinon on crée des données
                     else:
-                        toVisit.add(arc.target)
-                        paths[arc.target] = path
-                        
-        for node in self.nodes - visited:
-            pNone = Path(nodes={node0, node}, start=node0)
-            paths[node] = pNone
-        
-        return paths
+                        toExplore.add(arc.target)
+                        dist[arc.target] = dExplo
+                        parent[arc.target] = nMin
+        return tree
     
     def Display(self):
         """graph.Display()
@@ -347,5 +361,7 @@ if __name__ == "__main__":
     BASE = [n for n in g.nodes]
     BASE.sort()
     
-    g = Graph(nodes={BASE[0], BASE[1], BASE[2]}, arcs={Arc(BASE[0], BASE[1], 1), Arc(BASE[1], BASE[2], 1), Arc(BASE[2], BASE[0], 1)}, name="Cycle")
-    t = Tree(nodes={BASE[0], BASE[1], BASE[2], BASE[3]}, arcs={Arc(BASE[0], BASE[1], 1), Arc(BASE[0], BASE[2], 1), Arc(BASE[2], BASE[3], 1)}, name='Arbre_exemple')
+    #g = Graph(nodes={BASE[0], BASE[1], BASE[2]}, arcs={Arc(BASE[0], BASE[1], 1), Arc(BASE[1], BASE[2], 1), Arc(BASE[2], BASE[0], 1)}, name="Cycle")
+    #t = Tree(nodes={BASE[0], BASE[1], BASE[2], BASE[3]}, arcs={Arc(BASE[0], BASE[1], 1), Arc(BASE[0], BASE[2], 1), Arc(BASE[2], BASE[3], 1)}, name='Arbre_exemple')
+
+    t = g.Dijkstra(BASE[0])
