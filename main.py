@@ -125,7 +125,7 @@ class Graph:
         """graph.AddNode(node)
         Ajoute node aux sommets de graph."""
         if node.name in [n.name for n in self.nodes]:
-            print("Il y a déjà un sommet de nom {node.name} dans le graphe {self.name}.")
+            print(f"Il y a déjà un sommet de nom {node.name} dans le graphe {self.name}.")
         self.nodes.add(node)
         
     def RemoveNode(self, node):
@@ -186,15 +186,19 @@ class Graph:
             - tout point d'une autre partie connexe de graph
             n'est pas dans cet arbre"""
        
-        tree = Tree()
+        #POUR UNE RAISON QUE J'IGNORE, ENTRE PLUSIEURS APPELS SUCCESSIFS t SE CONSERVE,
+        #IL N'EST PAS REMIS A ZERO ???
+        t = Tree()
+        
         #Tous les sommets dans toExplore | tree.nodes sont clés de dist
         toExplore = {root}
         dist = {root:0}
         parent = dict()
-        while len(toExplore - tree.nodes) > 0:
-            print(toExplore)
+        
+        print("dans la fonction, t:",t.nodes, t.arcs)
+        while len(toExplore - t.nodes) > 0:
             #On prend le sommet déjà exploré le plus proche (il n'existera pas de plus court chemins que celui déjà trouvé)
-            L = list(toExplore - tree.nodes)
+            L = list(toExplore - t.nodes)
             nMin = L[0]
             dMin = dist[nMin]
             for node in L[1:]:
@@ -203,15 +207,15 @@ class Graph:
                     dMin = dist[node]
                     
             #On l'ajoute à l'arbre et on le retire de toExplore car il est entièrement déterminé
-            tree.AddNode(nMin)
+            t.AddNode(nMin)
             toExplore.remove(nMin)
             if nMin != root:
                 #S'il ne sagit pas de la racine, on crée un arc entre lui et son parent
-                tree.AddArc(Arc(parent[nMin], nMin, dist[nMin]-dist[parent[nMin]]))
+                t.AddArc(Arc(parent[nMin], nMin, dist[nMin]-dist[parent[nMin]]))
             
             #On parcourt ses sommets fils non encore déterminés, et on met à jour leurs propriétés
             for arc in nMin.ArcsFrom(self):
-                if arc.target not in tree.nodes:
+                if arc.target not in t.nodes:
                     dExplo = dist[nMin] + arc.weight
                     #Si ce sommet est déjà rencontré, on le met à jour
                     if arc.target in toExplore:
@@ -223,7 +227,7 @@ class Graph:
                         toExplore.add(arc.target)
                         dist[arc.target] = dExplo
                         parent[arc.target] = nMin
-        return tree
+        return t
     
     def Display(self):
         """graph.Display()
@@ -263,7 +267,23 @@ class Tree(Graph):
         Renvoie le sommet racine de tree."""   
         #La formule est définie car l'arbre est connexe sans cycle
         return [node for node in self.nodes if len(node.ArcsTowards(self)) == 0][0]
-
+    
+    def PathTowards(self, node):
+        """tree.PathTowards(node)
+        Renvoie le chemin connectant la racine de tree à node."""
+        path = Path(name='Chemin_extrait')
+        #Construit le chemin s'il existe
+        if node in self.nodes:
+            path.AddNode(node)
+            while len(node.ArcsTowards(self)) == 1:
+                arc = list(node.ArcsTowards(self))[0]
+                node = arc.source
+                path.AddNode(node)
+                path.AddArc(arc)
+        #Crée un chemin inexistant sinon
+        else:
+            path.nodes = {node, self.Root()}
+        return path
 
     
 class Path(Graph):
@@ -363,5 +383,9 @@ if __name__ == "__main__":
     
     #g = Graph(nodes={BASE[0], BASE[1], BASE[2]}, arcs={Arc(BASE[0], BASE[1], 1), Arc(BASE[1], BASE[2], 1), Arc(BASE[2], BASE[0], 1)}, name="Cycle")
     #t = Tree(nodes={BASE[0], BASE[1], BASE[2], BASE[3]}, arcs={Arc(BASE[0], BASE[1], 1), Arc(BASE[0], BASE[2], 1), Arc(BASE[2], BASE[3], 1)}, name='Arbre_exemple')
-
-    t = g.Dijkstra(BASE[0])
+    
+    #PROBLEME
+    print("noeuds de l'arbre:", g.Dijkstra(BASE[8]).nodes)
+    print("noeuds de l'arbre:", g.Dijkstra(BASE[0]).nodes)
+    print("noeuds de l'arbre:", g.Dijkstra(BASE[8]).nodes)
+    print("C'est pas normal...")
