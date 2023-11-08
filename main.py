@@ -389,3 +389,8 @@ if __name__ == "__main__":
     print("noeuds de l'arbre:", g.Dijkstra(BASE[0]).nodes)
     print("noeuds de l'arbre:", g.Dijkstra(BASE[8]).nodes)
     print("C'est pas normal...")
+
+
+    h = Tree()
+    print(h.nodes)
+    print("C'est même très absurde...")
