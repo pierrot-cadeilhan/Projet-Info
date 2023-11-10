@@ -97,7 +97,7 @@ class Arc:
     
 class Graph:
 #---Dunder methods
-    def __init__(self, arcs=set(), nodes=set(), name='Graphe'):
+    def __init__(self, arcs, nodes, name='Graphe'):
         self.name = name
         self.nodes = nodes
         self.arcs = arcs
@@ -114,7 +114,7 @@ class Graph:
     def __sub__(self, other):
         """Différence de deux graphes comme la réunion
         des sommets et la différence des arêtes."""
-        g = Graph()
+        g = Graph(set(), set())
         g.name = self.name + '-' + other.name
         g.nodes = self.nodes | other.nodes
         g.arcs = self.arcs - other.arcs
@@ -187,15 +187,17 @@ class Graph:
             n'est pas dans cet arbre"""
        
         #POUR UNE RAISON QUE J'IGNORE, ENTRE PLUSIEURS APPELS SUCCESSIFS t SE CONSERVE,
-        #IL N'EST PAS REMIS A ZERO ???
-        t = Tree()
+        #IL N'EST PAS REMIS A ZERO MALGRE LA VALEUR PAR DEFAUT DES PARAMETRES A set()
+        # -> on utilise plutôt t = Tree(set(), set())
+        # -> la valeur par défaut set() de l'init est le même ensemble pour chaque création. Ansi, il ne s'agit plus d'un set vide !
+        # Je ne mets plus de paramètre par défaut
+        t = Tree(set(), set())
         
         #Tous les sommets dans toExplore | tree.nodes sont clés de dist
         toExplore = {root}
         dist = {root:0}
-        parent = dict()
+        parentArc = dict()
         
-        print("dans la fonction, t:",t.nodes, t.arcs)
         while len(toExplore - t.nodes) > 0:
             #On prend le sommet déjà exploré le plus proche (il n'existera pas de plus court chemins que celui déjà trouvé)
             L = list(toExplore - t.nodes)
@@ -211,7 +213,7 @@ class Graph:
             toExplore.remove(nMin)
             if nMin != root:
                 #S'il ne sagit pas de la racine, on crée un arc entre lui et son parent
-                t.AddArc(Arc(parent[nMin], nMin, dist[nMin]-dist[parent[nMin]]))
+                t.AddArc(parentArc[nMin])
             
             #On parcourt ses sommets fils non encore déterminés, et on met à jour leurs propriétés
             for arc in nMin.ArcsFrom(self):
@@ -221,30 +223,76 @@ class Graph:
                     if arc.target in toExplore:
                         if dist[arc.target] > dExplo:
                             dist[arc.target] = dExplo
-                            parent[arc.target] = nMin
+                            parentArc[arc.target] = arc
                     #Sinon on crée des données
                     else:
                         toExplore.add(arc.target)
                         dist[arc.target] = dExplo
-                        parent[arc.target] = nMin
+                        parentArc[arc.target] = arc
         return t
     
-    def Display(self):
+    def Display(self, lspDisplay = False):
         """graph.Display()
         Construit, sauvegarde et affiche une représentation en svg de graph."""
         global noFigure
-        diag = gv.Digraph(f'{self.name}', filename=f'figures/{noFigure}.gv', format='svg')
+        diag = gv.Digraph(f'{self.name}', filename=f'figures/{noFigure}_{self.name}.gv', format='svg')
         noFigure += 1
         
-        for arc in self.arcs:
-            diag.edge(arc.source.name, arc.target.name, label=str(arc.weight))
-        for node in self.nodes:
-            diag.node(node.name)
-        diag.view()
+        lsp = Path(set(), Node(), set())
+        if lspDisplay:
+            lsp = self.LongestShortestPath()
         
+        for arc in self.arcs-lsp.arcs:
+            diag.edge(arc.source.name, arc.target.name, label=str(arc.weight))
+        for node in self.nodes-lsp.nodes:
+            diag.node(node.name)
+            
+        for arc in lsp.arcs:
+            diag.edge(arc.source.name, arc.target.name, label=str(arc.weight), color='red')
+        for node in lsp.nodes:
+            diag.node(node.name, color='red')
+        
+        diag.attr(rankdir='LR')
+        diag.attr(ratio=f'0.7')
+        diag.view()
+
+    def Render(self, lspDisplay=False):
+        """graph.Render()
+        Construit et sauvegarde une représentation en png de graph."""
+        global noFigure
+        diag = gv.Digraph(f'{self.name}', filename=f'figures/{noFigure}_{self.name}.gv', format='svg')
+        noFigure += 1
+        
+        lsp = Path(set(), Node(), set())
+        if lspDisplay:
+            lsp = self.LongestShortestPath()
+        
+        for arc in self.arcs-lsp.arcs:
+            diag.edge(arc.source.name, arc.target.name, label=str(arc.weight))
+        for node in self.nodes-lsp.nodes:
+            diag.node(node.name)
+            
+        for arc in lsp.arcs:
+            diag.edge(arc.source.name, arc.target.name, label=str(arc.weight), color='red')
+        for node in lsp.nodes:
+            diag.node(node.name, color='red')
+            
+        diag.format = 'png'
+        diag.attr(rankdir='LR')
+        diag.attr(ratio=f'0.7')
+        diag.render()
+        
+    def LongestShortestPath(self):
+        """grapg.LongestShortestPath()
+        Renvoie le plus long plus court chemin entre deux sommets d'une même partie connexe du graphe orienté."""
+        trees = {node0:g.Dijkstra(node0) for node0 in g.nodes}
+        longestShortestPath = max([max([trees[node0].PathTowards(node1) for node1 in trees[node0].nodes]) for node0 in g.nodes])
+        return longestShortestPath
+        
+    
 class Tree(Graph):
 #---Dunder methods
-    def __init__(self, nodes=set(), arcs=set(), name='Arbre'):
+    def __init__(self, nodes, arcs, name='Arbre'):
         super().__init__(nodes=nodes, arcs=arcs, name=name)
         
 #---Custom methods
@@ -271,10 +319,11 @@ class Tree(Graph):
     def PathTowards(self, node):
         """tree.PathTowards(node)
         Renvoie le chemin connectant la racine de tree à node."""
-        path = Path(name='Chemin_extrait')
+        path = Path(nodes = set(), start = node, arcs = set(), name=f'Chemin_extrait_de_{self.name}_vers_{node.name}')
         #Construit le chemin s'il existe
         if node in self.nodes:
             path.AddNode(node)
+            path.start = node
             while len(node.ArcsTowards(self)) == 1:
                 arc = list(node.ArcsTowards(self))[0]
                 node = arc.source
@@ -282,24 +331,36 @@ class Tree(Graph):
                 path.AddArc(arc)
         #Crée un chemin inexistant sinon
         else:
+            path.start = node
             path.nodes = {node, self.Root()}
+            path.arcs = set()
         return path
 
     
+
 class Path(Graph):
 #---Dunder methods
-    def __init__(self, nodes=set(), start=Node(), arcs=set(), name='Chemin'):
+    def __init__(self, nodes, start, arcs, name='Chemin'):
         super().__init__(nodes=nodes, arcs=arcs, name=name)
         self.start = start
         
     def __lt__(self, other):
-        return self.Length() < other.Length()
+        if self.IsTrivial():
+            return True
+        elif other.IsTrivial():
+            return False
+        elif self.IsNot():
+            return False
+        elif other.IsNot():
+            return True
+        else:
+            return self.Length() < other.Length()
     
     def __add__(self, other):
         """Somme de deux graphes comme la réunion
         des sommets et la différence des arêtes."""
         #/!\ Il faut que le sommet à l'extrémité de self soit le sommet de départ de other
-        p = Path()
+        p = Path(set, Node(), set())
         p.name = self.name + '-' + other.name
         p.nodes = self.nodes | other.nodes
         p.arcs = self.arcs | other.arcs
@@ -375,7 +436,7 @@ class Parser:
 
 if __name__ == "__main__":
     p = Parser()
-    g = Graph()
+    g = Graph(set(), set())
     g.FromFile(p, 'graphe.txt')
     
     BASE = [n for n in g.nodes]
@@ -384,13 +445,30 @@ if __name__ == "__main__":
     #g = Graph(nodes={BASE[0], BASE[1], BASE[2]}, arcs={Arc(BASE[0], BASE[1], 1), Arc(BASE[1], BASE[2], 1), Arc(BASE[2], BASE[0], 1)}, name="Cycle")
     #t = Tree(nodes={BASE[0], BASE[1], BASE[2], BASE[3]}, arcs={Arc(BASE[0], BASE[1], 1), Arc(BASE[0], BASE[2], 1), Arc(BASE[2], BASE[3], 1)}, name='Arbre_exemple')
     
-    #PROBLEME
-    print("noeuds de l'arbre:", g.Dijkstra(BASE[8]).nodes)
-    print("noeuds de l'arbre:", g.Dijkstra(BASE[0]).nodes)
-    print("noeuds de l'arbre:", g.Dijkstra(BASE[8]).nodes)
-    print("C'est pas normal...")
-
-
-    h = Tree()
-    print(h.nodes)
-    print("C'est même très absurde...")
+    g.Render(True)
+    
+    g.FromFile(p, 'cycle.txt')
+    BASE = [n for n in g.nodes]
+    BASE.sort()
+    g.Render(lspDisplay=True)
+    
+    # #CLOSEST NODE TO EVERY POINT (totDist min)
+    # trees = {node:g.Dijkstra(node) for node in BASE}
+    # totDists = {node0: sum([trees[node0].Depth(node1) for node1 in BASE]) for node0 in BASE}
+    
+    # mini = (BASE[0], totDists[BASE[0]])
+    # for node in BASE[1:]:
+    #     if mini[1] > totDists[node]:
+    #         mini = (node, totDists[node])
+    # trees[mini[0]].Display()
+    
+    # #CLOSEST NODE TO EVERY POINT (maxDist min)
+    # trees = {node:g.Dijkstra(node) for node in BASE}
+    # maxDists = {node0: max([trees[node0].Depth(node1) for node1 in BASE]) for node0 in BASE}
+  
+    # mini = (BASE[0], maxDists[BASE[0]])
+    # for node in BASE[1:]:
+    #     if mini[1] > maxDists[node]:
+    #         mini = (node, maxDists[node])
+    # trees[mini[0]].Display()
+    
